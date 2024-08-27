@@ -1,6 +1,5 @@
 import socket
 
-
 def start_server():
     print("Starting server...")
     
@@ -14,11 +13,19 @@ def start_server():
         print(f"Connection established with {addr}")
         
         with conn:
-            client_message = conn.recv(1024)
-            print(f"Received message: {client_message.decode()}")
-                  
-            conn.sendall(pong_message.encode())
-            print(f"Sent message: {pong_message}")
+            while True:
+                client_message = conn.recv(1024)
+                if not client_message:
+                    break
+                
+                messages = client_message.decode().splitlines()
+                for message in messages:
+                    if message == "PING":
+                        conn.sendall(pong_message.encode())
+                        print(f"Received message: {message}")
+                        print(f"Sent message: {pong_message}")
+                    else:
+                        print(f"Received unknown message: {message}")
             
 if __name__ == "__main__":
     start_server()
