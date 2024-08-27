@@ -26,6 +26,6 @@ def start_server():
                         print(f"Sent message: {pong_message}")
                     else:
                         print(f"Received unknown message: {message}")
-            
+        
 if __name__ == "__main__":
     start_server()
