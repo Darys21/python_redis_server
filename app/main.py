@@ -1,15 +1,24 @@
-import socket  # noqa: F401
+import socket
 
 
-def main():
-    # You can use print statements as follows for debugging, they'll be visible when running tests.
-    print("Logs from your program will appear here!")
-
-    # Uncomment this to pass the first stage
-    #
+def start_server():
+    print("Starting server...")
+    
+    pong_message = "+PONG\r\n"
+    
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
-    server_socket.accept() # wait for client
-
-
+    print("Server started and listening on port 6379")
+    
+    while True: 
+        conn, addr = server_socket.accept()
+        print(f"Connection established with {addr}")
+        
+        with conn:
+            client_message = conn.recv(1024)
+            print(f"Received message: {client_message.decode()}")
+                  
+            conn.sendall(pong_message.encode())
+            print(f"Sent message: {pong_message}")
+            
 if __name__ == "__main__":
-    main()
+    start_server()
