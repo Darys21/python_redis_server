@@ -26,7 +26,7 @@ def parse_redis_protocol(data):
             break
     return commands
 
-def handle_client(conn, addr):
+def handle_client(conn, addr, data_store):
     print(f"Connection established with {addr}")
     pong_message = "+PONG\r\n"
         
@@ -52,6 +52,21 @@ def handle_client(conn, addr):
                     conn.sendall(response.encode())
                     print(f"Received command: {message}")
                     print(f"Sent response: {response}")
+                elif command == "SET" and len(message) == 3:
+                    data_store[message[1]] = message[2]
+                    response = "+OK\r\n"
+                    conn.sendall(response.encode())
+                    print(f"Received command: {message}")
+                    print(f"Sent response: {response}")
+                elif command == "GET" and len(message) == 2:
+                    value = data_store.get(message[1], None)
+                    if value is not None:
+                        response = f"${len(value)}\r\n{value}\r\n"
+                    else:
+                        response = "$-1\r\n"
+                    conn.sendall(response.encode())
+                    print(f"Received command: {message}")
+                    print(f"Sent response: {response}")
                 else:
                     print(f"Received unknown command: {message}")
 def start_server():
@@ -60,9 +75,10 @@ def start_server():
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
     print("Server started and listening on port 6379")
     
+    data_store = {}
     while True:
         conn, addr = server_socket.accept()
-        client_thread = threading.Thread(target=handle_client, args=(conn, addr))
+        client_thread = threading.Thread(target=handle_client, args=(conn, addr, data_store))
         client_thread.start()
 
 if __name__ == "__main__":
