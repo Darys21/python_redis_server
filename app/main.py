@@ -1,11 +1,9 @@
 import socket
 import threading
+import time
 
 def parse_redis_protocol(data):
-    """
-    Parses RESP (REdis Serialization Protocol) messages.
-    Returns a list of commands and their arguments.
-    """
+    
     commands = []
     i = 0
     while i < len(data):
@@ -26,7 +24,7 @@ def parse_redis_protocol(data):
             break
     return commands
 
-def handle_client(conn, addr, data_store):
+def handle_client(conn, addr, data_store, expiry_store):
     print(f"Connection established with {addr}")
     pong_message = "+PONG\r\n"
         
@@ -52,14 +50,26 @@ def handle_client(conn, addr, data_store):
                     conn.sendall(response.encode())
                     print(f"Received command: {message}")
                     print(f"Sent response: {response}")
-                elif command == "SET" and len(message) == 3:
-                    data_store[message[1]] = message[2]
+                elif command == "SET":
+                    key = message[1]
+                    value = message[2]
+                    expiry = None
+                    if len(message) == 5 and message[3].upper() == "PX":
+                        expiry = int(message[4]) / 1000  # Convert milliseconds to seconds
+                    data_store[key] = value
+                    if expiry is not None:
+                        expiry_store[key] = time.time() + expiry
                     response = "+OK\r\n"
                     conn.sendall(response.encode())
                     print(f"Received command: {message}")
                     print(f"Sent response: {response}")
                 elif command == "GET" and len(message) == 2:
-                    value = data_store.get(message[1], None)
+                    key = message[1]
+                    value = data_store.get(key, None)
+                    if key in expiry_store and time.time() > expiry_store[key]:
+                        value = None
+                        del data_store[key]
+                        del expiry_store[key]
                     if value is not None:
                         response = f"${len(value)}\r\n{value}\r\n"
                     else:
@@ -76,9 +86,10 @@ def start_server():
     print("Server started and listening on port 6379")
     
     data_store = {}
+    expiry_store = {}
     while True:
         conn, addr = server_socket.accept()
-        client_thread = threading.Thread(target=handle_client, args=(conn, addr, data_store))
+        client_thread = threading.Thread(target=handle_client, args=(conn, addr, data_store, expiry_store))
         client_thread.start()
 
 if __name__ == "__main__":
