@@ -1,9 +1,10 @@
 import socket
 import threading
 import time
+import sys
+import argparse
 
 def parse_redis_protocol(data):
-    
     commands = []
     i = 0
     while i < len(data):
@@ -24,7 +25,7 @@ def parse_redis_protocol(data):
             break
     return commands
 
-def handle_client(conn, addr, data_store, expiry_store):
+def handle_client(conn, addr, data_store, expiry_store, config_params):
     print(f"Connection established with {addr}")
     pong_message = "+PONG\r\n"
         
@@ -77,9 +78,20 @@ def handle_client(conn, addr, data_store, expiry_store):
                     conn.sendall(response.encode())
                     print(f"Received command: {message}")
                     print(f"Sent response: {response}")
+                elif command == "CONFIG" and len(message) == 3 and message[1].upper() == "GET":
+                    param = message[2]
+                    if param in config_params:
+                        value = config_params[param]
+                        response = f"*2\r\n${len(param)}\r\n{param}\r\n${len(value)}\r\n{value}\r\n"
+                    else:
+                        response = "*0\r\n"
+                    conn.sendall(response.encode())
+                    print(f"Received command: {message}")
+                    print(f"Sent response: {response}")
                 else:
                     print(f"Received unknown command: {message}")
-def start_server():
+
+def start_server(dir_path, dbfilename):
     print("Starting server...")
 
     server_socket = socket.create_server(("localhost", 6379), reuse_port=True)
@@ -87,10 +99,19 @@ def start_server():
     
     data_store = {}
     expiry_store = {}
+    config_params = {
+        "dir": dir_path,
+        "dbfilename": dbfilename
+    }
     while True:
         conn, addr = server_socket.accept()
-        client_thread = threading.Thread(target=handle_client, args=(conn, addr, data_store, expiry_store))
+        client_thread = threading.Thread(target=handle_client, args=(conn, addr, data_store, expiry_store, config_params))
         client_thread.start()
 
 if __name__ == "__main__":
-    start_server()
+    parser = argparse.ArgumentParser(description="Start a Redis-like server with RDB persistence configuration.")
+    parser.add_argument("--dir", required=True, help="The directory where the RDB file is stored.")
+    parser.add_argument("--dbfilename", required=True, help="The name of the RDB file.")
+    args = parser.parse_args()
+
+    start_server(args.dir, args.db)
