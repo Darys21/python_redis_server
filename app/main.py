@@ -114,4 +114,4 @@ if __name__ == "__main__":
     parser.add_argument("--dbfilename", required=True, help="The name of the RDB file.")
     args = parser.parse_args()
 
-    start_server(args.dir, args.db)
+    start_server(args.dir, args.dbfilename)
