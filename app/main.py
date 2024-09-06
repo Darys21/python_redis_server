@@ -167,20 +167,19 @@ async def replicate_commands_to_replicas(commands: list[str]) -> None:
                 print(f'sent {commands_bytes} to replica {replica_w.get_extra_info('peername')}')
 
 # Each client connection is handled by this function, All local variable belongs to the invividual client session
-async def connection_handler(
-        reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def connection_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     try:
         addr = writer.get_extra_info('peername')
         previous_command = None
         while reader.at_eof() is False:
-            original,commands = await RESPParser.parse_resp_array_request(reader)
+            original, commands = await RESPParser.parse_resp_array_request(reader)
             print(f"{replication['role']} - command: {original}, length: {len(original)}, parsed: {commands} from client {addr[0]}:{addr[1]}")
             if commands is None:
                 break
-            await execute_resp_commands(commands,writer) 
+            await execute_resp_commands(commands, writer)
             # Sending the commands to the replicas if needed
             await replicate_commands_to_replicas(commands)
-            await handle_wait(commands,writer,previous_command)
+            await handle_wait(commands, writer, previous_command)
             previous_command = commands[0].lower()
         print(f"{replication['role']} - Connection closed from client {addr[0]}:{addr[1]}")
     except asyncio.IncompleteReadError as re:

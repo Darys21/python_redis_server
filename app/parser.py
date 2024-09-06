@@ -1,5 +1,6 @@
 import re
 from enum import Enum
+import asyncio
 
 class DataType(Enum):
     SIMPLE_STRING = b'+'
@@ -33,19 +34,19 @@ class Command(Enum):
 
 class RESPParser:
     @staticmethod
-    def parse_resp_array_request(reader):
+    async def parse_resp_array_request(reader):
         try:
-            first_byte = reader.read(1)
+            first_byte = await reader.read(1)
             if first_byte == DataType.ARRAY.value:
-                array_length = int(reader.readline().strip())
+                array_length = int((await reader.readline()).strip())
                 commands = []
                 for _ in range(array_length):
-                    command_type = reader.read(1)
+                    command_type = await reader.read(1)
                     if command_type == DataType.BULK_STRING.value:
-                        command_length = int(reader.readline().strip())
-                        command = reader.read(command_length).decode()
+                        command_length = int((await reader.readline()).strip())
+                        command = (await reader.read(command_length)).decode()
                         commands.append(command)
-                        reader.read(2)  # Consume the \r\n
+                        await reader.read(2)  # Consume the \r\n
                     else:
                         raise ValueError("Unsupported command type")
                 return commands, commands
@@ -56,10 +57,10 @@ class RESPParser:
             return None, None
 
     @staticmethod
-    def parse_resp_simple_string(reader):
+    async def parse_resp_simple_string(reader):
         try:
-            if reader.read(1) == DataType.SIMPLE_STRING.value:
-                return reader.readline().strip()
+            if (await reader.read(1)) == DataType.SIMPLE_STRING.value:
+                return (await reader.readline()).strip()
             else:
                 raise ValueError("Expected simple string type")
         except Exception as e:
@@ -67,14 +68,14 @@ class RESPParser:
             return None
 
     @staticmethod
-    def parse_resp_bulk_string(reader):
+    async def parse_resp_bulk_string(reader):
         try:
-            if reader.read(1) == DataType.BULK_STRING.value:
-                length = int(reader.readline().strip())
+            if (await reader.read(1)) == DataType.BULK_STRING.value:
+                length = int((await reader.readline()).strip())
                 if length == -1:
                     return None
-                data = reader.read(length)
-                reader.read(2)  # Consume the \r\n
+                data = await reader.read(length)
+                await reader.read(2)  # Consume the \r\n
                 return data
             else:
                 raise ValueError("Expected bulk string type")
@@ -83,10 +84,10 @@ class RESPParser:
             return None
 
     @staticmethod
-    def parse_resp_integer(reader):
+    async def parse_resp_integer(reader):
         try:
-            if reader.read(1) == DataType.INTEGER.value:
-                return int(reader.readline().strip())
+            if (await reader.read(1)) == DataType.INTEGER.value:
+                return int((await reader.readline()).strip())
             else:
                 raise ValueError("Expected integer type")
         except Exception as e:
@@ -94,10 +95,10 @@ class RESPParser:
             return None
 
     @staticmethod
-    def parse_resp_error(reader):
+    async def parse_resp_error(reader):
         try:
-            if reader.read(1) == DataType.ERROR.value:
-                return reader.readline().strip()
+            if (await reader.read(1)) == DataType.ERROR.value:
+                return (await reader.readline()).strip()
             else:
                 raise ValueError("Expected error type")
         except Exception as e:
