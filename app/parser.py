@@ -1,106 +1,93 @@
-import re
-from enum import Enum
 import asyncio
+from dataclasses import dataclass
 
-class DataType(Enum):
-    SIMPLE_STRING = b'+'
-    ERROR = b'-'
-    INTEGER = b':'
-    BULK_STRING = b'$'
+
+@dataclass(frozen=True)
+class DataType:
     ARRAY = b'*'
+    BULK_STRING = b'$'
+    SIMPLE_STRING = b'+'
+    SIMPLE_ERROR = b'-'
+    INTEGER = b':'
 
+
+@dataclass
 class Constant:
+    NULL_BULK_STRING = b'$-1\r\n'
     TERMINATOR = b'\r\n'
     EMPTY_BYTE = b''
     SPACE_BYTE = b' '
     PONG = b'PONG'
     OK = b'OK'
-    INVALID_COMMAND = b'Invalid command'
-    NULL_BULK_STRING = b'$-1\r\n'
+    INVALID_COMMAND = b'Invalid Command'
     FULLRESYNC = b'FULLRESYNC'
 
-class Command(Enum):
+
+@dataclass
+class Command:
     PING = 'ping'
     ECHO = 'echo'
-    GET = 'get'
     SET = 'set'
+    GET = 'get'
     INFO = 'info'
     REPLCONF = 'replconf'
+    ACK = 'ack'
+    GETACK = 'getack'
     PSYNC = 'psync'
     FULLRESYNC = 'fullresync'
-    WAIT = 'wait'
+    WAIT= 'wait'
     CONFIG = 'config'
-    ACK = 'ack'
+   
+
 
 class RESPParser:
-    @staticmethod
-    async def parse_resp_array_request(reader):
+
+    async def parse_resp_array_request(reader: asyncio.StreamReader):
+        original = b''
         try:
             first_byte = await reader.read(1)
-            if first_byte == DataType.ARRAY.value:
-                array_length = int((await reader.readline()).strip())
-                commands = []
-                for _ in range(array_length):
-                    command_type = await reader.read(1)
-                    if command_type == DataType.BULK_STRING.value:
-                        command_length = int((await reader.readline()).strip())
-                        command = (await reader.read(command_length)).decode()
-                        commands.append(command)
-                        await reader.read(2)  # Consume the \r\n
-                    else:
-                        raise ValueError("Unsupported command type")
-                return commands, commands
-            else:
-                raise ValueError("Expected array type")
-        except Exception as e:
-            print(f"Error parsing RESP array request: {e}")
-            return None, None
+            original += first_byte
+            if first_byte == Constant.EMPTY_BYTE:
+                return original,None
+            if first_byte != DataType.ARRAY:
+                print(f'Expected {DataType.ARRAY}, got {first_byte}')
+                return original,[]
 
-    @staticmethod
-    async def parse_resp_simple_string(reader):
-        try:
-            if (await reader.read(1)) == DataType.SIMPLE_STRING.value:
-                return (await reader.readline()).strip()
-            else:
-                raise ValueError("Expected simple string type")
-        except Exception as e:
-            print(f"Error parsing RESP simple string: {e}")
-            return None
+            num_commands = await reader.readuntil(Constant.TERMINATOR)
+            original += num_commands
+            num_commands_int = int(num_commands)
+            
+            # note: even though read.readuntil() returns bytes along with the terminator,
+            # int() is able to handle bytes and surrounding whitespaces.
+            # note: '\r' and '\n' are counted as whitespaces.
 
-    @staticmethod
-    async def parse_resp_bulk_string(reader):
-        try:
-            if (await reader.read(1)) == DataType.BULK_STRING.value:
-                length = int((await reader.readline()).strip())
-                if length == -1:
-                    return None
-                data = await reader.read(length)
-                await reader.read(2)  # Consume the \r\n
-                return data
-            else:
-                raise ValueError("Expected bulk string type")
-        except Exception as e:
-            print(f"Error parsing RESP bulk string: {e}")
-            return None
+            parsed = []
 
-    @staticmethod
-    async def parse_resp_integer(reader):
-        try:
-            if (await reader.read(1)) == DataType.INTEGER.value:
-                return int((await reader.readline()).strip())
-            else:
-                raise ValueError("Expected integer type")
-        except Exception as e:
-            print(f"Error parsing RESP integer: {e}")
-            return None
+            while len(parsed) < num_commands_int:
 
-    @staticmethod
-    async def parse_resp_error(reader):
-        try:
-            if (await reader.read(1)) == DataType.ERROR.value:
-                return (await reader.readline()).strip()
-            else:
-                raise ValueError("Expected error type")
+                datatype = await reader.read(1)
+                original += datatype
+                if datatype == DataType.BULK_STRING:
+                    length = await reader.readuntil(Constant.TERMINATOR)
+                    original += length
+                    length = int(length)
+                    data = await reader.read(length)
+                    original += data
+                    first_byte = await reader.read(2)
+                    original += first_byte
+                    # terminator not found after `length` bytes
+                    if first_byte != Constant.TERMINATOR:
+                        print(f'Expected {Constant.TERMINATOR}, got {first_byte}')
+                        return original,[]
+
+                    parsed.append(data.decode())
+
+                else:
+                    print(f'Expected {DataType.BULK_STRING}, got {datatype}')
+                    return original,[]
+            return original,parsed
+
         except Exception as e:
-            print(f"Error parsing RESP error: {e}")
-            return None
+            print(f'An error occurred: {e}')
+            return original,[]
+        

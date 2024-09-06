@@ -93,7 +93,7 @@ async def execute_resp_commands(commands: list[str] | None,writer: asyncio.Strea
                 response =  await encode(DataType.BULK_STRING, data)
             case Command.REPLCONF:
                 # Handshake commands from replica's
-                if replication['role'] == 'master': 
+                if replication['role'] == 'master':
                     if commands[1].lower() == 'listening-port':
                         async with replica_connections_lock:
                             replica_connections.append(writer)
@@ -103,7 +103,7 @@ async def execute_resp_commands(commands: list[str] | None,writer: asyncio.Strea
                         response =  await encode(DataType.SIMPLE_STRING, Constant.OK)
                     elif commands[1].lower() == Command.ACK:
                         await replica_ack_queue.put("1")
-                        print(f"{replication['role']} - ACK received from replica, Total ACKs: {replica_ack_queue.qsize()}")  
+                        print(f"{replication['role']} - ACK received from replica, Total ACKs: {replica_ack_queue.qsize()}")
             case Command.PSYNC:
                 # Handshake commands from replica's
                 if replication['role'] == 'master':
@@ -148,7 +148,7 @@ async def handle_wait(commands: list[str],writer: asyncio.StreamWriter,previous_
                     await replica_w.drain()
                     print(f'sent REPLCONF GETACK * to replica {replica_w.get_extra_info('peername')}')
                 await asyncio.sleep(wait_time_in_sec)
-                replicas_count = replica_ack_queue.qsize() 
+                replicas_count = replica_ack_queue.qsize()
         writer.write(await encode(DataType.INTEGER, str(replicas_count).encode()))
         await writer.drain()
         print(f"{replication['role']} - Sent replica count: {replicas_count} to client {addr[0]}:{addr[1]}")
@@ -167,19 +167,20 @@ async def replicate_commands_to_replicas(commands: list[str]) -> None:
                 print(f'sent {commands_bytes} to replica {replica_w.get_extra_info('peername')}')
 
 # Each client connection is handled by this function, All local variable belongs to the invividual client session
-async def connection_handler(reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
+async def connection_handler(
+        reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
     try:
         addr = writer.get_extra_info('peername')
         previous_command = None
         while reader.at_eof() is False:
-            original, commands = await RESPParser.parse_resp_array_request(reader)
+            original,commands = await RESPParser.parse_resp_array_request(reader)
             print(f"{replication['role']} - command: {original}, length: {len(original)}, parsed: {commands} from client {addr[0]}:{addr[1]}")
             if commands is None:
                 break
-            await execute_resp_commands(commands, writer)
+            await execute_resp_commands(commands,writer)
             # Sending the commands to the replicas if needed
             await replicate_commands_to_replicas(commands)
-            await handle_wait(commands, writer, previous_command)
+            await handle_wait(commands,writer,previous_command)
             previous_command = commands[0].lower()
         print(f"{replication['role']} - Connection closed from client {addr[0]}:{addr[1]}")
     except asyncio.IncompleteReadError as re:
